@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from 'react';
-import { Users, FileText, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Users, FileText, Loader as Loader2, CircleCheck as CheckCircle, CircleAlert as AlertCircle } from 'lucide-react';
 
 export default function BulkDialer() {
     const [input, setInput] = useState('');

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Phone, MessageSquare, Loader2, Sparkles } from 'lucide-react';
+import { Phone, MessageSquare, Loader as Loader2, Sparkles } from 'lucide-react';
 
 export default function CallDispatcher() {
     const [phoneNumber, setPhoneNumber] = useState('');
@@ -17,9 +17,13 @@ export default function CallDispatcher() {
         const voice = (form.elements.namedItem('voice') as HTMLSelectElement).value;
 
         try {
-            const res = await fetch('/api/dispatch', {
+            const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/dispatch-call`;
+            const res = await fetch(apiUrl, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+                },
                 body: JSON.stringify({ phoneNumber, prompt, modelProvider, voice }),
             });
 

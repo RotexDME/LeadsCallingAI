@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, FileText, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Users, FileText, Loader as Loader2, CircleCheck as CheckCircle, CircleAlert as AlertCircle } from 'lucide-react';
 
 export default function BulkDialer() {
     const [input, setInput] = useState('');
@@ -20,9 +20,13 @@ export default function BulkDialer() {
         }
 
         try {
-            const res = await fetch('/api/queue', {
+            const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/queue-calls`;
+            const res = await fetch(apiUrl, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+                },
                 body: JSON.stringify({ numbers, prompt }),
             });
 
