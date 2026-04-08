@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import { sipClient, roomService } from '@/lib/server-utils';
+import { supabase, Contact, Call } from '@/lib/supabase';
 
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { phoneNumber, prompt, modelProvider, voice } = body;
+        const { phoneNumber, prompt, modelProvider, voice, contactName, contactEmail, metadata: customMetadata } = body;
 
         if (!phoneNumber) {
             return NextResponse.json({ error: "Phone number is required" }, { status: 400 });
@@ -16,52 +17,130 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "SIP Trunk not configured" }, { status: 500 });
         }
 
-        // Generate a unique room name for this call
+        // Step 1: Create or update contact
+        let contactId: string | null = null;
+        const { data: existingContact } = await supabase
+            .from('contacts')
+            .select('id')
+            .eq('phone_number', phoneNumber)
+            .maybeSingle();
+
+        if (existingContact) {
+            contactId = existingContact.id;
+            // Update contact if name or email provided
+            if (contactName || contactEmail) {
+                await supabase
+                    .from('contacts')
+                    .update({
+                        name: contactName || undefined,
+                        email: contactEmail || undefined,
+                    })
+                    .eq('id', contactId);
+            }
+        } else {
+            // Create new contact
+            const { data: newContact, error: contactError } = await supabase
+                .from('contacts')
+                .insert({
+                    phone_number: phoneNumber,
+                    name: contactName || null,
+                    email: contactEmail || null,
+                    metadata: customMetadata || {}
+                })
+                .select('id')
+                .single();
+
+            if (contactError) {
+                console.error("Error creating contact:", contactError);
+            } else {
+                contactId = newContact?.id || null;
+            }
+        }
+
+        // Step 2: Generate unique room name
         const roomName = `call-${phoneNumber.replace(/\+/g, '')}-${Math.floor(Math.random() * 10000)}`;
-        const particpantIdentity = `sip_${phoneNumber}`;
+        const participantIdentity = `sip_${phoneNumber}`;
 
         console.log(`Dispatching call to ${phoneNumber} in room ${roomName} via trunk ${trunkId}`);
 
-        // Create the SIP Participant
-        // This triggers the SIP Trunk to dial the number and connect it to the room.
-        // The Agent (running separately) will join this room when it sees the job/room creation.
-        // Wait... for Explicit Dispatch (Job), we usually use the AgentDispatchClient or just rely on the Agent watching all rooms.
-        // 
-        // BUT, for Outbound calling, the flow is:
-        // 1. Create a Room (implicitly done by creating participant)
-        // 2. Add SIP Participant to Room.
-        // 3. The Agent (configured to join rooms) joins.
+        // Step 3: Create call record in database
+        const callData: Call = {
+            contact_id: contactId,
+            phone_number: phoneNumber,
+            room_name: roomName,
+            status: 'initiated',
+            direction: 'outbound',
+            prompt: prompt || null,
+            model_provider: modelProvider || 'openai',
+            voice_id: voice || 'alloy',
+            metadata: customMetadata || {},
+            started_at: new Date().toISOString()
+        };
 
-        // HOWEVER, standard LiveKit Agent flow often uses a "Job" dispatch for explicit assignment.
-        // The `agent.py` provided listens for creating rooms? No, it's a Worker.
-        // `make_call.py` (which we are replacing) logic was:
-        //  api.create_sip_participant(...)
-        //
-        // So we just replicate `make_call.py` logic here.
+        const { data: callRecord, error: callError } = await supabase
+            .from('calls')
+            .insert(callData)
+            .select('id')
+            .single();
 
-        const metadata = JSON.stringify({
+        if (callError) {
+            console.error("Error creating call record:", callError);
+        }
+
+        // Step 4: Prepare metadata for LiveKit
+        const livekitMetadata = JSON.stringify({
             phone_number: phoneNumber,
             user_prompt: prompt || "",
             model_provider: modelProvider || "openai",
-            voice_id: voice || "alloy"
+            voice_id: voice || "alloy",
+            call_id: callRecord?.id || null
         });
 
-        const info = await sipClient.createSipParticipant(
-            trunkId,
-            phoneNumber,
-            roomName,
-            {
-                participantIdentity: particpantIdentity,
-                participantName: "Customer",
-                roomMetadata: metadata, // Pass metadata so Agent knows context
+        // Step 5: Initiate SIP call
+        try {
+            const info = await sipClient.createSipParticipant(
+                trunkId,
+                phoneNumber,
+                roomName,
+                {
+                    participantIdentity,
+                    participantName: contactName || "Customer",
+                    roomMetadata: livekitMetadata,
+                }
+            );
+
+            // Update call record with SIP call ID
+            if (callRecord?.id) {
+                await supabase
+                    .from('calls')
+                    .update({
+                        sip_call_id: info.sipCallId,
+                        status: 'ringing'
+                    })
+                    .eq('id', callRecord.id);
             }
-        );
 
-        return NextResponse.json({
-            success: true,
-            roomName,
-            dispatchId: info.sipCallId
-        });
+            return NextResponse.json({
+                success: true,
+                callId: callRecord?.id,
+                roomName,
+                sipCallId: info.sipCallId
+            });
+
+        } catch (sipError: any) {
+            // Update call status to failed
+            if (callRecord?.id) {
+                await supabase
+                    .from('calls')
+                    .update({
+                        status: 'failed',
+                        error_message: sipError.message,
+                        ended_at: new Date().toISOString()
+                    })
+                    .eq('id', callRecord.id);
+            }
+            throw sipError;
+        }
 
     } catch (error: any) {
         console.error("Error dispatching call:", error);
