@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from 'react';
-import { Phone, MessageSquare, Loader2, Sparkles } from 'lucide-react';
+import { Phone, MessageSquare, Loader as Loader2, Sparkles } from 'lucide-react';
 
 export default function CallDispatcher() {
     const [phoneNumber, setPhoneNumber] = useState('');
@@ -43,14 +43,14 @@ export default function CallDispatcher() {
     return (
         <div className="relative group max-w-md w-full">
             {/* Glow Effect */}
-            <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl opacity-75 group-hover:opacity-100 transition duration-1000 group-hover:duration-200 blur-lg animate-tilt"></div>
+            <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-cyan-600 rounded-2xl opacity-75 group-hover:opacity-100 transition duration-1000 group-hover:duration-200 blur-lg animate-tilt"></div>
 
             <div className="relative p-8 bg-black/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl">
                 <div className="flex items-center justify-between mb-8">
-                    <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
+                    <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-400">
                         Deploy Agent
                     </h2>
-                    <Sparkles className="w-5 h-5 text-purple-400 animate-pulse" />
+                    <Sparkles className="w-5 h-5 text-cyan-400 animate-pulse" />
                 </div>
 
                 <form onSubmit={handleDispatch} className="space-y-6">
@@ -76,7 +76,7 @@ export default function CallDispatcher() {
                             placeholder="e.g. You are calling regarding a coffee order..."
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
-                            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white placeholder-gray-600 outline-none transition-all duration-300 h-28 resize-none"
+                            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-white placeholder-gray-600 outline-none transition-all duration-300 h-28 resize-none"
                         />
                     </div>
 
@@ -95,7 +95,7 @@ export default function CallDispatcher() {
                         <div className="space-y-2">
                             <label className="text-sm text-gray-400 font-medium">Voice</label>
                             <select
-                                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white outline-none focus:ring-2 focus:ring-purple-500"
+                                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white outline-none focus:ring-2 focus:ring-cyan-500"
                                 name="voice"
                                 defaultValue="alloy"
                             >
@@ -111,7 +111,7 @@ export default function CallDispatcher() {
                     <button
                         type="submit"
                         disabled={status === 'loading'}
-                        className="w-full py-4 px-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold rounded-xl shadow-lg hover:shadow-blue-500/25 transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5 active:translate-y-0"
+                        className="w-full py-4 px-6 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-bold rounded-xl shadow-lg hover:shadow-blue-500/25 transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5 active:translate-y-0"
                     >
                         {status === 'loading' ? (
                             <>
