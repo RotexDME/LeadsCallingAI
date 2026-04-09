@@ -56,7 +56,8 @@ export default function VoiceTestModal({ onClose, prompt, modelProvider, voiceNa
   const [supported, setSupported] = useState(true);
 
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
-  const synthRef = useRef<SpeechSynthesis | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioBlobUrlRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const finalTranscriptRef = useRef('');
   const messagesRef = useRef<Message[]>([]);
@@ -65,42 +66,72 @@ export default function VoiceTestModal({ onClose, prompt, modelProvider, voiceNa
 
   useEffect(() => {
     const SR: ISpeechRecognitionConstructor | undefined = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR || !window.speechSynthesis) {
+    if (!SR) {
       setSupported(false);
-      return;
     }
-    synthRef.current = window.speechSynthesis;
   }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isThinking, isSpeaking]);
 
-  const speak = useCallback((text: string): Promise<void> => {
-    return new Promise((resolve) => {
-      if (!synthRef.current) { resolve(); return; }
-      synthRef.current.cancel();
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.rate = 1.05;
-      utter.pitch = 1;
-      utter.volume = 1;
-      const voices = synthRef.current.getVoices();
-      let preferred: SpeechSynthesisVoice | undefined;
-      if (voiceName) {
-        preferred = voices.find(v => v.name.toLowerCase().includes(voiceName.toLowerCase()));
+  useEffect(() => {
+    return () => {
+      if (audioBlobUrlRef.current) URL.revokeObjectURL(audioBlobUrlRef.current);
+      audioRef.current?.pause();
+    };
+  }, []);
+
+  const speak = useCallback(async (text: string): Promise<void> => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    if (audioBlobUrlRef.current) {
+      URL.revokeObjectURL(audioBlobUrlRef.current);
+      audioBlobUrlRef.current = null;
+    }
+
+    try {
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tts`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ text, voice: voiceName || 'alloy' }),
+      });
+
+      if (!res.ok) {
+        throw new Error('TTS request failed');
       }
-      if (!preferred) {
-        preferred =
-          voices.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('female')) ||
-          voices.find(v => v.lang.startsWith('en')) ||
-          voices[0];
-      }
-      if (preferred) utter.voice = preferred;
-      utter.onstart = () => setIsSpeaking(true);
-      utter.onend = () => { setIsSpeaking(false); resolve(); };
-      utter.onerror = () => { setIsSpeaking(false); resolve(); };
-      synthRef.current.speak(utter);
-    });
+
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      audioBlobUrlRef.current = blobUrl;
+
+      return new Promise((resolve) => {
+        const audio = new Audio(blobUrl);
+        audioRef.current = audio;
+        audio.onplay = () => setIsSpeaking(true);
+        audio.onended = () => { setIsSpeaking(false); resolve(); };
+        audio.onerror = () => { setIsSpeaking(false); resolve(); };
+        audio.play().catch(() => { setIsSpeaking(false); resolve(); });
+      });
+    } catch {
+      return new Promise((resolve) => {
+        const synth = window.speechSynthesis;
+        if (!synth) { resolve(); return; }
+        synth.cancel();
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.rate = 1.05;
+        utter.onstart = () => setIsSpeaking(true);
+        utter.onend = () => { setIsSpeaking(false); resolve(); };
+        utter.onerror = () => { setIsSpeaking(false); resolve(); };
+        synth.speak(utter);
+      });
+    }
   }, [voiceName]);
 
   const sendToAI = useCallback(async (userMessage: string, history: Message[]): Promise<string> => {
@@ -218,7 +249,12 @@ export default function VoiceTestModal({ onClose, prompt, modelProvider, voiceNa
 
   const handleClose = useCallback(() => {
     recognitionRef.current?.stop();
-    synthRef.current?.cancel();
+    audioRef.current?.pause();
+    audioRef.current = null;
+    if (audioBlobUrlRef.current) {
+      URL.revokeObjectURL(audioBlobUrlRef.current);
+      audioBlobUrlRef.current = null;
+    }
     onClose();
   }, [onClose]);
 
@@ -339,7 +375,7 @@ export default function VoiceTestModal({ onClose, prompt, modelProvider, voiceNa
             </div>
           )}
           <p className="text-center text-gray-600 text-xs mt-2">
-            Uses browser mic + Web Speech API — no phone required
+            Uses OpenAI TTS + browser mic — no phone required
           </p>
         </div>
       </div>
