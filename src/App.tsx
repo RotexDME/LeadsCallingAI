@@ -2,16 +2,20 @@ import CallDispatcher from './components/CallDispatcher';
 import BulkDialer from './components/BulkDialer';
 import CallLogs from './components/CallLogs';
 import AnalyticsBar from './components/AnalyticsBar';
+import AgentStatus from './components/AgentStatus';
 
 function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
       <div className="container mx-auto px-4 py-12">
-        <header className="text-center mb-16">
+        <header className="text-center mb-10">
           <h1 className="text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-cyan-400 to-green-400 mb-4">
             AI Voice Agent Dashboard
           </h1>
-          <p className="text-gray-400 text-lg">Deploy intelligent voice agents instantly</p>
+          <p className="text-gray-400 text-lg mb-6">Deploy intelligent voice agents instantly</p>
+          <div className="flex justify-center">
+            <AgentStatus />
+          </div>
         </header>
 
         <AnalyticsBar />

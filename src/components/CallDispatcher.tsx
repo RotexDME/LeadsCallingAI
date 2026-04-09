@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Phone, MessageSquare, Loader2, Sparkles } from 'lucide-react';
+import { Phone, MessageSquare, Loader2, Sparkles, Info } from 'lucide-react';
 
 export default function CallDispatcher() {
     const [phoneNumber, setPhoneNumber] = useState('');
@@ -124,10 +124,23 @@ export default function CallDispatcher() {
                     </button>
 
                     {message && (
-                        <div className={`p-4 rounded-xl text-sm text-center border ${status === 'success' ? 'bg-green-500/10 text-green-200 border-green-500/20' : 'bg-red-500/10 text-red-200 border-red-500/20'}`}>
-                            {message}
+                        <div className={`p-4 rounded-xl text-sm border ${status === 'success' ? 'bg-green-500/10 text-green-200 border-green-500/20' : 'bg-red-500/10 text-red-200 border-red-500/20'}`}>
+                            <p className="font-semibold mb-1">{status === 'success' ? 'Call queued' : 'Error'}</p>
+                            <p>{message}</p>
+                            {status === 'success' && (
+                                <p className="mt-2 text-green-300/70 text-xs">
+                                    The call record is saved. The Python agent (<code className="font-mono bg-white/10 px-1 rounded">agent.py</code>) must be running and connected to LiveKit to dial the number via the SIP trunk.
+                                </p>
+                            )}
                         </div>
                     )}
+
+                    <div className="flex items-start gap-2 p-3 bg-white/3 border border-white/8 rounded-xl text-xs text-gray-500">
+                        <Info className="w-3.5 h-3.5 shrink-0 mt-0.5 text-gray-600" />
+                        <span>
+                            This queues the call in the database. The actual phone call is made by the Python agent when it is running and connected to LiveKit.
+                        </span>
+                    </div>
                 </form>
             </div>
         </div>
