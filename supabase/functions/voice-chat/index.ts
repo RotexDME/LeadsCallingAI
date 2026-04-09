@@ -27,7 +27,7 @@ async function getConfigKeys(): Promise<{ openaiKey: string | null; groqKey: str
   const { data } = await supabase
     .from("agent_config")
     .select("key, value")
-    .in("key", ["OPENAI_API_KEY", "GROQ_API_KEY"]);
+    .in("key", ["LLM_OPENAI_KEY", "LLM_GROQ_KEY"]);
 
   const map: Record<string, string> = {};
   for (const row of data ?? []) {
@@ -35,8 +35,8 @@ async function getConfigKeys(): Promise<{ openaiKey: string | null; groqKey: str
   }
 
   return {
-    openaiKey: map["OPENAI_API_KEY"] || Deno.env.get("OPENAI_API_KEY") || null,
-    groqKey: map["GROQ_API_KEY"] || Deno.env.get("GROQ_API_KEY") || null,
+    openaiKey: map["LLM_OPENAI_KEY"] || null,
+    groqKey: map["LLM_GROQ_KEY"] || null,
   };
 }
 
@@ -80,7 +80,7 @@ If they say "Bye", say "Namaste" or "Goodbye".`,
     } else {
       if (!openaiKey) {
         return new Response(
-          JSON.stringify({ error: "No AI API key configured. Add OPENAI_API_KEY in Settings." }),
+          JSON.stringify({ error: "No AI API key configured. Add your OpenAI or Groq key in Settings." }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
