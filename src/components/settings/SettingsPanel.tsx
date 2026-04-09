@@ -170,7 +170,14 @@ export default function SettingsPanel() {
       ) : (
         <div className="space-y-6">
           {sortedGroups.map(group => {
-            const entries = config.filter(c => c.group === group);
+            const KEY_ORDER = ['AI_SYSTEM_PROMPT', 'AI_CONTEXT_PROMPT'];
+            const entries = config
+              .filter(c => c.group === group)
+              .sort((a, b) => {
+                const ai = KEY_ORDER.indexOf(a.key);
+                const bi = KEY_ORDER.indexOf(b.key);
+                return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+              });
             const meta = GROUP_META[group] ?? { label: group, color: 'border-white/10 bg-white/3' };
             const groupConfigured = entries.filter(c => (edits[c.key] ?? c.value).trim()).length;
             const isInstructions = group === 'instructions';
@@ -210,7 +217,7 @@ export default function SettingsPanel() {
                     const currentVal = edits[entry.key] ?? entry.value;
                     const changed = currentVal !== entry.value;
                     const isRevealed = revealed[entry.key];
-                    const isTextarea = entry.key === 'AI_SYSTEM_PROMPT';
+                    const isTextarea = entry.key === 'AI_SYSTEM_PROMPT' || entry.key === 'AI_CONTEXT_PROMPT';
 
                     return (
                       <div key={entry.key} className={`px-6 py-4 ${isTextarea ? 'flex flex-col gap-3' : 'flex items-center gap-4'}`}>
@@ -233,7 +240,7 @@ export default function SettingsPanel() {
                               value={currentVal}
                               onChange={e => handleChange(entry.key, e.target.value)}
                               placeholder={entry.placeholder}
-                              rows={10}
+                              rows={entry.key === 'AI_CONTEXT_PROMPT' ? 12 : 10}
                               className={`w-full px-4 py-3 bg-black/40 border rounded-xl text-sm text-white placeholder-gray-700 outline-none transition-all duration-200 font-mono resize-y leading-relaxed ${
                                 changed
                                   ? 'border-blue-500/60 ring-1 ring-blue-500/30'
@@ -241,7 +248,9 @@ export default function SettingsPanel() {
                               }`}
                             />
                             <p className="text-xs text-gray-600">
-                              This prompt is sent to the AI at the start of every conversation. Changes take effect immediately for new sessions.
+                              {entry.key === 'AI_SYSTEM_PROMPT'
+                                ? 'Defines the AI\'s role, tone, and behavioral rules. Combined with the context below on every request.'
+                                : 'Supplementary knowledge (FAQs, school details, policies) injected alongside the system prompt. The AI uses this as its knowledge base.'}
                             </p>
                           </>
                         ) : (

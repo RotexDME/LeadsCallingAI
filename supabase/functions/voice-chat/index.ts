@@ -32,6 +32,7 @@ async function getConfig(): Promise<{
   openaiKey: string | null;
   groqKey: string | null;
   systemPrompt: string;
+  contextPrompt: string;
 }> {
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -41,7 +42,7 @@ async function getConfig(): Promise<{
   const { data } = await supabase
     .from("agent_config")
     .select("key, value")
-    .in("key", ["LLM_OPENAI_KEY", "LLM_GROQ_KEY", "AI_SYSTEM_PROMPT"]);
+    .in("key", ["LLM_OPENAI_KEY", "LLM_GROQ_KEY", "AI_SYSTEM_PROMPT", "AI_CONTEXT_PROMPT"]);
 
   const map: Record<string, string> = {};
   for (const row of data ?? []) {
@@ -52,7 +53,13 @@ async function getConfig(): Promise<{
     openaiKey: map["LLM_OPENAI_KEY"] || null,
     groqKey: map["LLM_GROQ_KEY"] || null,
     systemPrompt: map["AI_SYSTEM_PROMPT"]?.trim() || DEFAULT_SYSTEM_PROMPT,
+    contextPrompt: map["AI_CONTEXT_PROMPT"]?.trim() || "",
   };
+}
+
+function buildSystemContent(systemPrompt: string, contextPrompt: string): string {
+  if (!contextPrompt) return systemPrompt;
+  return `${systemPrompt}\n\n---\nContext / Knowledge Base:\n${contextPrompt}`;
 }
 
 Deno.serve(async (req: Request) => {
@@ -64,13 +71,16 @@ Deno.serve(async (req: Request) => {
     const body: VoiceChatRequest = await req.json();
     const { messages, systemPrompt: overridePrompt, modelProvider } = body;
 
-    const { openaiKey, groqKey, systemPrompt: dbPrompt } = await getConfig();
+    const { openaiKey, groqKey, systemPrompt: dbSystem, contextPrompt } = await getConfig();
 
     const useGroq = modelProvider === "groq" && groqKey;
 
+    const basePrompt = overridePrompt || dbSystem;
+    const systemContent = buildSystemContent(basePrompt, contextPrompt);
+
     const systemMessage: ChatMessage = {
       role: "system",
-      content: overridePrompt || dbPrompt,
+      content: systemContent,
     };
 
     const allMessages = [systemMessage, ...messages];
