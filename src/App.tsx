@@ -1,5 +1,7 @@
 import CallDispatcher from './components/CallDispatcher';
 import BulkDialer from './components/BulkDialer';
+import CallLogs from './components/CallLogs';
+import AnalyticsBar from './components/AnalyticsBar';
 
 function App() {
   return (
@@ -12,9 +14,15 @@ function App() {
           <p className="text-gray-400 text-lg">Deploy intelligent voice agents instantly</p>
         </header>
 
-        <div className="grid md:grid-cols-2 gap-8 max-w-6xl mx-auto">
+        <AnalyticsBar />
+
+        <div className="grid md:grid-cols-2 gap-8 max-w-6xl mx-auto mb-10">
           <CallDispatcher />
           <BulkDialer />
+        </div>
+
+        <div className="max-w-6xl mx-auto">
+          <CallLogs />
         </div>
 
         <footer className="mt-20 text-center text-gray-600 text-sm">
