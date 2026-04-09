@@ -7,6 +7,16 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+const DEFAULT_SYSTEM_PROMPT = `You are a helpful and polite School Receptionist at "Rapid X High School".
+Your Goal: Answer questions from parents about admissions, fees, and timings.
+Key Behaviors:
+1. Multilingual: You can speak fluent English and Hindi. If the user speaks Hindi, switch to Hindi immediately.
+2. Polite & Warm: Always be welcoming and respectful.
+3. Be Concise: Keep answers short (1-2 sentences).
+4. Admissions: If asked about admissions, say they are open for Grade 1 to 10 and ask if they want to schedule a visit.
+5. Fees: If asked about fees, say "Please visit the school office for exact details, but it starts at roughly 50k per year."
+If they say "Bye", say "Namaste" or "Goodbye".`;
+
 interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
@@ -18,7 +28,11 @@ interface VoiceChatRequest {
   modelProvider?: string;
 }
 
-async function getConfigKeys(): Promise<{ openaiKey: string | null; groqKey: string | null }> {
+async function getConfig(): Promise<{
+  openaiKey: string | null;
+  groqKey: string | null;
+  systemPrompt: string;
+}> {
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -27,7 +41,7 @@ async function getConfigKeys(): Promise<{ openaiKey: string | null; groqKey: str
   const { data } = await supabase
     .from("agent_config")
     .select("key, value")
-    .in("key", ["LLM_OPENAI_KEY", "LLM_GROQ_KEY"]);
+    .in("key", ["LLM_OPENAI_KEY", "LLM_GROQ_KEY", "AI_SYSTEM_PROMPT"]);
 
   const map: Record<string, string> = {};
   for (const row of data ?? []) {
@@ -37,6 +51,7 @@ async function getConfigKeys(): Promise<{ openaiKey: string | null; groqKey: str
   return {
     openaiKey: map["LLM_OPENAI_KEY"] || null,
     groqKey: map["LLM_GROQ_KEY"] || null,
+    systemPrompt: map["AI_SYSTEM_PROMPT"]?.trim() || DEFAULT_SYSTEM_PROMPT,
   };
 }
 
@@ -47,24 +62,15 @@ Deno.serve(async (req: Request) => {
 
   try {
     const body: VoiceChatRequest = await req.json();
-    const { messages, systemPrompt, modelProvider } = body;
+    const { messages, systemPrompt: overridePrompt, modelProvider } = body;
 
-    const { openaiKey, groqKey } = await getConfigKeys();
+    const { openaiKey, groqKey, systemPrompt: dbPrompt } = await getConfig();
 
     const useGroq = modelProvider === "groq" && groqKey;
 
     const systemMessage: ChatMessage = {
       role: "system",
-      content: systemPrompt ||
-        `You are a helpful and polite School Receptionist at "Rapid X High School".
-Your Goal: Answer questions from parents about admissions, fees, and timings.
-Key Behaviors:
-1. Multilingual: You can speak fluent English and Hindi. If the user speaks Hindi, switch to Hindi immediately.
-2. Polite & Warm: Always be welcoming and respectful.
-3. Be Concise: Keep answers short (1-2 sentences).
-4. Admissions: If asked about admissions, say they are open for Grade 1 to 10 and ask if they want to schedule a visit.
-5. Fees: If asked about fees, say "Please visit the school office for exact details, but it starts at roughly 50k per year."
-If they say "Bye", say "Namaste" or "Goodbye".`,
+      content: overridePrompt || dbPrompt,
     };
 
     const allMessages = [systemMessage, ...messages];

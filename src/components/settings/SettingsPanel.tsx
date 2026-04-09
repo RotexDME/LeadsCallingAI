@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Save, RefreshCw, Eye, EyeOff, CheckCircle, AlertCircle, ExternalLink } from 'lucide-react';
+import { Save, RefreshCw, Eye, EyeOff, CheckCircle, AlertCircle, ExternalLink, Bot } from 'lucide-react';
 
 interface ConfigEntry {
   key: string;
@@ -20,11 +20,14 @@ interface RevealState {
 }
 
 const GROUP_META: Record<string, { label: string; color: string; docUrl?: string }> = {
-  livekit: { label: 'LiveKit (Voice Infrastructure)', color: 'border-blue-500/30 bg-blue-500/5', docUrl: 'https://cloud.livekit.io' },
-  stt:     { label: 'Deepgram (Speech-to-Text)',     color: 'border-cyan-500/30 bg-cyan-500/5',  docUrl: 'https://console.deepgram.com' },
-  llm:     { label: 'LLM Providers (OpenAI / Groq)', color: 'border-green-500/30 bg-green-500/5', docUrl: 'https://platform.openai.com' },
-  sip:     { label: 'SIP Trunk (Vobiz / Outbound)',  color: 'border-yellow-500/30 bg-yellow-500/5' },
+  instructions: { label: 'AI Instructions', color: 'border-orange-500/30 bg-orange-500/5' },
+  livekit:      { label: 'LiveKit (Voice Infrastructure)', color: 'border-blue-500/30 bg-blue-500/5', docUrl: 'https://cloud.livekit.io' },
+  stt:          { label: 'Deepgram (Speech-to-Text)',     color: 'border-cyan-500/30 bg-cyan-500/5',  docUrl: 'https://console.deepgram.com' },
+  llm:          { label: 'LLM Providers (OpenAI / Groq)', color: 'border-green-500/30 bg-green-500/5', docUrl: 'https://platform.openai.com' },
+  sip:          { label: 'SIP Trunk (Vobiz / Outbound)',  color: 'border-yellow-500/30 bg-yellow-500/5' },
 };
+
+const GROUP_ORDER = ['instructions', 'livekit', 'stt', 'llm', 'sip'];
 
 function statusDot(value: string) {
   return value.trim()
@@ -103,7 +106,12 @@ export default function SettingsPanel() {
     }
   };
 
-  const groups = Array.from(new Set(config.map(c => c.group)));
+  const sortedGroups = Array.from(new Set(config.map(c => c.group)))
+    .sort((a, b) => {
+      const ai = GROUP_ORDER.indexOf(a);
+      const bi = GROUP_ORDER.indexOf(b);
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    });
 
   const configuredCount = config.filter(c => c.value.trim()).length;
   const sipConfigured = config
@@ -161,25 +169,29 @@ export default function SettingsPanel() {
         </div>
       ) : (
         <div className="space-y-6">
-          {groups.map(group => {
+          {sortedGroups.map(group => {
             const entries = config.filter(c => c.group === group);
             const meta = GROUP_META[group] ?? { label: group, color: 'border-white/10 bg-white/3' };
             const groupConfigured = entries.filter(c => (edits[c.key] ?? c.value).trim()).length;
+            const isInstructions = group === 'instructions';
 
             return (
               <div key={group} className={`border rounded-2xl overflow-hidden ${meta.color}`}>
                 <div className="flex items-center justify-between px-6 py-4 border-b border-white/8">
                   <div className="flex items-center gap-3">
+                    {isInstructions && <Bot className="w-4 h-4 text-orange-400 shrink-0" />}
                     <h3 className="text-white font-semibold text-sm">{meta.label}</h3>
-                    <span className={`text-xs px-2 py-0.5 rounded-full border ${
-                      groupConfigured === entries.length
-                        ? 'bg-green-500/15 text-green-300 border-green-500/25'
-                        : groupConfigured > 0
-                          ? 'bg-yellow-500/15 text-yellow-300 border-yellow-500/25'
-                          : 'bg-gray-700/40 text-gray-500 border-gray-600/30'
-                    }`}>
-                      {groupConfigured}/{entries.length}
-                    </span>
+                    {!isInstructions && (
+                      <span className={`text-xs px-2 py-0.5 rounded-full border ${
+                        groupConfigured === entries.length
+                          ? 'bg-green-500/15 text-green-300 border-green-500/25'
+                          : groupConfigured > 0
+                            ? 'bg-yellow-500/15 text-yellow-300 border-yellow-500/25'
+                            : 'bg-gray-700/40 text-gray-500 border-gray-600/30'
+                      }`}>
+                        {groupConfigured}/{entries.length}
+                      </span>
+                    )}
                   </div>
                   {meta.docUrl && (
                     <a
@@ -198,41 +210,76 @@ export default function SettingsPanel() {
                     const currentVal = edits[entry.key] ?? entry.value;
                     const changed = currentVal !== entry.value;
                     const isRevealed = revealed[entry.key];
+                    const isTextarea = entry.key === 'AI_SYSTEM_PROMPT';
 
                     return (
-                      <div key={entry.key} className="px-6 py-4 flex items-center gap-4">
-                        <div className="flex items-center gap-2 w-52 shrink-0">
-                          {statusDot(currentVal)}
-                          <label className="text-sm text-gray-300 font-medium truncate">
-                            {entry.label}
-                          </label>
-                        </div>
+                      <div key={entry.key} className={`px-6 py-4 ${isTextarea ? 'flex flex-col gap-3' : 'flex items-center gap-4'}`}>
+                        {isTextarea ? (
+                          <>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <label className="text-sm text-gray-300 font-medium">
+                                  {entry.label}
+                                </label>
+                                {changed && (
+                                  <span className="text-xs text-blue-400">unsaved</span>
+                                )}
+                              </div>
+                              <span className="text-xs text-gray-600">
+                                {currentVal.length} chars
+                              </span>
+                            </div>
+                            <textarea
+                              value={currentVal}
+                              onChange={e => handleChange(entry.key, e.target.value)}
+                              placeholder={entry.placeholder}
+                              rows={10}
+                              className={`w-full px-4 py-3 bg-black/40 border rounded-xl text-sm text-white placeholder-gray-700 outline-none transition-all duration-200 font-mono resize-y leading-relaxed ${
+                                changed
+                                  ? 'border-blue-500/60 ring-1 ring-blue-500/30'
+                                  : 'border-white/10 focus:border-white/25'
+                              }`}
+                            />
+                            <p className="text-xs text-gray-600">
+                              This prompt is sent to the AI at the start of every conversation. Changes take effect immediately for new sessions.
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-2 w-52 shrink-0">
+                              {statusDot(currentVal)}
+                              <label className="text-sm text-gray-300 font-medium truncate">
+                                {entry.label}
+                              </label>
+                            </div>
 
-                        <div className="flex-1 relative">
-                          <input
-                            type={entry.is_secret && !isRevealed ? 'password' : 'text'}
-                            value={currentVal}
-                            onChange={e => handleChange(entry.key, e.target.value)}
-                            placeholder={entry.placeholder}
-                            className={`w-full px-4 py-2.5 bg-black/40 border rounded-xl text-sm text-white placeholder-gray-700 outline-none transition-all duration-200 pr-10 font-mono ${
-                              changed
-                                ? 'border-blue-500/60 ring-1 ring-blue-500/30'
-                                : 'border-white/10 focus:border-white/25'
-                            }`}
-                          />
-                          {entry.is_secret && (
-                            <button
-                              type="button"
-                              onClick={() => setRevealed(prev => ({ ...prev, [entry.key]: !prev[entry.key] }))}
-                              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-300 transition-colors"
-                            >
-                              {isRevealed ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                            </button>
-                          )}
-                        </div>
+                            <div className="flex-1 relative">
+                              <input
+                                type={entry.is_secret && !isRevealed ? 'password' : 'text'}
+                                value={currentVal}
+                                onChange={e => handleChange(entry.key, e.target.value)}
+                                placeholder={entry.placeholder}
+                                className={`w-full px-4 py-2.5 bg-black/40 border rounded-xl text-sm text-white placeholder-gray-700 outline-none transition-all duration-200 pr-10 font-mono ${
+                                  changed
+                                    ? 'border-blue-500/60 ring-1 ring-blue-500/30'
+                                    : 'border-white/10 focus:border-white/25'
+                                }`}
+                              />
+                              {entry.is_secret && (
+                                <button
+                                  type="button"
+                                  onClick={() => setRevealed(prev => ({ ...prev, [entry.key]: !prev[entry.key] }))}
+                                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-300 transition-colors"
+                                >
+                                  {isRevealed ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                              )}
+                            </div>
 
-                        {changed && (
-                          <span className="text-xs text-blue-400 shrink-0">unsaved</span>
+                            {changed && (
+                              <span className="text-xs text-blue-400 shrink-0">unsaved</span>
+                            )}
+                          </>
                         )}
                       </div>
                     );
