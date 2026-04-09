@@ -25,6 +25,7 @@ interface ChatMessage {
 interface VoiceChatRequest {
   messages: ChatMessage[];
   systemPrompt?: string;
+  contextOverride?: string;
   modelProvider?: string;
 }
 
@@ -69,14 +70,15 @@ Deno.serve(async (req: Request) => {
 
   try {
     const body: VoiceChatRequest = await req.json();
-    const { messages, systemPrompt: overridePrompt, modelProvider } = body;
+    const { messages, systemPrompt: overridePrompt, contextOverride, modelProvider } = body;
 
     const { openaiKey, groqKey, systemPrompt: dbSystem, contextPrompt } = await getConfig();
 
     const useGroq = modelProvider === "groq" && groqKey;
 
     const basePrompt = overridePrompt || dbSystem;
-    const systemContent = buildSystemContent(basePrompt, contextPrompt);
+    const combinedContext = [contextPrompt, contextOverride].filter(Boolean).join("\n\n");
+    const systemContent = buildSystemContent(basePrompt, combinedContext);
 
     const systemMessage: ChatMessage = {
       role: "system",

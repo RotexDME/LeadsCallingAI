@@ -108,7 +108,7 @@ export default function VoiceTestModal({ onClose, prompt, modelProvider }: Voice
         },
         body: JSON.stringify({
           messages: [...history, { role: 'user', content: userMessage }],
-          systemPrompt: prompt || undefined,
+          contextOverride: prompt || undefined,
           modelProvider: modelProvider || 'openai',
         }),
       });
