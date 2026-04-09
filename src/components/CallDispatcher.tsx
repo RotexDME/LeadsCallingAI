@@ -161,6 +161,7 @@ export default function CallDispatcher() {
                     onClose={() => setShowVoiceTest(false)}
                     prompt={prompt || undefined}
                     modelProvider={modelProvider}
+                    voiceName={voice}
                 />
             )}
         </>

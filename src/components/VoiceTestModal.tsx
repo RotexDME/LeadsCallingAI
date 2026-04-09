@@ -10,6 +10,7 @@ interface VoiceTestModalProps {
   onClose: () => void;
   prompt?: string;
   modelProvider?: string;
+  voiceName?: string;
 }
 
 interface ISpeechRecognitionEvent {
@@ -44,7 +45,7 @@ declare global {
   }
 }
 
-export default function VoiceTestModal({ onClose, prompt, modelProvider }: VoiceTestModalProps) {
+export default function VoiceTestModal({ onClose, prompt, modelProvider, voiceName }: VoiceTestModalProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -84,17 +85,23 @@ export default function VoiceTestModal({ onClose, prompt, modelProvider }: Voice
       utter.pitch = 1;
       utter.volume = 1;
       const voices = synthRef.current.getVoices();
-      const preferred =
-        voices.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('female')) ||
-        voices.find(v => v.lang.startsWith('en')) ||
-        voices[0];
+      let preferred: SpeechSynthesisVoice | undefined;
+      if (voiceName) {
+        preferred = voices.find(v => v.name.toLowerCase().includes(voiceName.toLowerCase()));
+      }
+      if (!preferred) {
+        preferred =
+          voices.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('female')) ||
+          voices.find(v => v.lang.startsWith('en')) ||
+          voices[0];
+      }
       if (preferred) utter.voice = preferred;
       utter.onstart = () => setIsSpeaking(true);
       utter.onend = () => { setIsSpeaking(false); resolve(); };
       utter.onerror = () => { setIsSpeaking(false); resolve(); };
       synthRef.current.speak(utter);
     });
-  }, []);
+  }, [voiceName]);
 
   const sendToAI = useCallback(async (userMessage: string, history: Message[]): Promise<string> => {
     setIsThinking(true);
