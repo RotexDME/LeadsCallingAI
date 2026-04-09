@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import { Phone, MessageSquare, Loader2, Sparkles, Info, Mic } from 'lucide-react';
-import VoiceTestModal from './VoiceTestModal';
+import VoiceTestModal, { type ActivityEntry } from './VoiceTestModal';
 
-export default function CallDispatcher() {
+interface CallDispatcherProps {
+  onActivity?: (entry: ActivityEntry) => void;
+}
+
+export default function CallDispatcher({ onActivity }: CallDispatcherProps) {
     const [phoneNumber, setPhoneNumber] = useState('');
     const [prompt, setPrompt] = useState('');
     const [modelProvider, setModelProvider] = useState('openai');
@@ -162,6 +166,7 @@ export default function CallDispatcher() {
                     prompt={prompt || undefined}
                     modelProvider={modelProvider}
                     voiceName={voice}
+                    onActivity={onActivity}
                 />
             )}
         </>

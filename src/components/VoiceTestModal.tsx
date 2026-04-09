@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Mic, MicOff, Volume2, Loader2, Phone, AlertCircle } from 'lucide-react';
+import { X, Mic, MicOff, Volume2, Loader2, Phone, AlertCircle, Globe } from 'lucide-react';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -11,6 +11,15 @@ interface VoiceTestModalProps {
   prompt?: string;
   modelProvider?: string;
   voiceName?: string;
+  onActivity?: (entry: ActivityEntry) => void;
+}
+
+export interface ActivityEntry {
+  id: string;
+  timestamp: Date;
+  type: 'info' | 'success' | 'error' | 'ai' | 'user' | 'tts' | 'stt';
+  label: string;
+  detail?: string;
 }
 
 interface ISpeechRecognitionEvent {
@@ -45,7 +54,32 @@ declare global {
   }
 }
 
-export default function VoiceTestModal({ onClose, prompt, modelProvider, voiceName }: VoiceTestModalProps) {
+const LANGUAGES = [
+  { code: 'en-US', label: 'English (US)' },
+  { code: 'en-IN', label: 'English (India)' },
+  { code: 'hi-IN', label: 'Hindi' },
+  { code: 'ta-IN', label: 'Tamil' },
+  { code: 'te-IN', label: 'Telugu' },
+  { code: 'kn-IN', label: 'Kannada' },
+  { code: 'ml-IN', label: 'Malayalam' },
+  { code: 'mr-IN', label: 'Marathi' },
+  { code: 'gu-IN', label: 'Gujarati' },
+  { code: 'bn-IN', label: 'Bengali' },
+  { code: 'pa-IN', label: 'Punjabi' },
+  { code: 'es-ES', label: 'Spanish' },
+  { code: 'fr-FR', label: 'French' },
+  { code: 'de-DE', label: 'German' },
+  { code: 'ar-SA', label: 'Arabic' },
+  { code: 'zh-CN', label: 'Chinese (Mandarin)' },
+  { code: 'ja-JP', label: 'Japanese' },
+  { code: 'pt-BR', label: 'Portuguese (Brazil)' },
+];
+
+function makeId() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+export default function VoiceTestModal({ onClose, prompt, modelProvider, voiceName, onActivity }: VoiceTestModalProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -54,6 +88,7 @@ export default function VoiceTestModal({ onClose, prompt, modelProvider, voiceNa
   const [error, setError] = useState('');
   const [callStarted, setCallStarted] = useState(false);
   const [supported, setSupported] = useState(true);
+  const [selectedLang, setSelectedLang] = useState('en-US');
 
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -64,12 +99,17 @@ export default function VoiceTestModal({ onClose, prompt, modelProvider, voiceNa
 
   messagesRef.current = messages;
 
+  const log = useCallback((type: ActivityEntry['type'], label: string, detail?: string) => {
+    onActivity?.({ id: makeId(), timestamp: new Date(), type, label, detail });
+  }, [onActivity]);
+
   useEffect(() => {
     const SR: ISpeechRecognitionConstructor | undefined = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
       setSupported(false);
+      log('error', 'Browser does not support Web Speech API');
     }
-  }, []);
+  }, [log]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -93,6 +133,7 @@ export default function VoiceTestModal({ onClose, prompt, modelProvider, voiceNa
     }
 
     try {
+      log('tts', 'TTS request sent', `voice=${voiceName || 'alloy'}, chars=${text.length}`);
       const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tts`;
       const res = await fetch(url, {
         method: 'POST',
@@ -104,12 +145,13 @@ export default function VoiceTestModal({ onClose, prompt, modelProvider, voiceNa
       });
 
       if (!res.ok) {
-        throw new Error('TTS request failed');
+        throw new Error(`TTS HTTP ${res.status}`);
       }
 
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
       audioBlobUrlRef.current = blobUrl;
+      log('success', 'TTS audio received', `size=${(blob.size / 1024).toFixed(1)} KB`);
 
       return new Promise((resolve) => {
         const audio = new Audio(blobUrl);
@@ -119,7 +161,8 @@ export default function VoiceTestModal({ onClose, prompt, modelProvider, voiceNa
         audio.onerror = () => { setIsSpeaking(false); resolve(); };
         audio.play().catch(() => { setIsSpeaking(false); resolve(); });
       });
-    } catch {
+    } catch (e: unknown) {
+      log('error', 'TTS failed, using browser fallback', e instanceof Error ? e.message : String(e));
       return new Promise((resolve) => {
         const synth = window.speechSynthesis;
         if (!synth) { resolve(); return; }
@@ -132,10 +175,11 @@ export default function VoiceTestModal({ onClose, prompt, modelProvider, voiceNa
         synth.speak(utter);
       });
     }
-  }, [voiceName]);
+  }, [voiceName, log]);
 
   const sendToAI = useCallback(async (userMessage: string, history: Message[]): Promise<string> => {
     setIsThinking(true);
+    log('info', 'Sending to AI', `provider=${modelProvider || 'openai'}, history=${history.length} msgs`);
     try {
       const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/voice-chat`;
       const res = await fetch(url, {
@@ -152,11 +196,16 @@ export default function VoiceTestModal({ onClose, prompt, modelProvider, voiceNa
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'AI error');
+      log('ai', 'AI reply received', `model=${data.model}, reply="${data.reply?.slice(0, 60)}${data.reply?.length > 60 ? '…' : ''}"`);
       return data.reply as string;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'AI error';
+      log('error', 'AI request failed', msg);
+      throw e;
     } finally {
       setIsThinking(false);
     }
-  }, [prompt, modelProvider]);
+  }, [prompt, modelProvider, log]);
 
   const handleFinalSpeech = useCallback(async (spoken: string) => {
     if (!spoken.trim()) return;
@@ -164,6 +213,7 @@ export default function VoiceTestModal({ onClose, prompt, modelProvider, voiceNa
     const currentHistory = messagesRef.current;
     setMessages(prev => [...prev, userMsg]);
     setLiveTranscript('');
+    log('user', 'User spoke', spoken);
     try {
       const reply = await sendToAI(spoken, currentHistory);
       const assistantMsg: Message = { role: 'assistant', content: reply };
@@ -172,14 +222,14 @@ export default function VoiceTestModal({ onClose, prompt, modelProvider, voiceNa
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     }
-  }, [sendToAI, speak]);
+  }, [sendToAI, speak, log]);
 
   const startListening = useCallback(() => {
     const SR: ISpeechRecognitionConstructor | undefined = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
 
     const recognition = new SR();
-    recognition.lang = 'en-US';
+    recognition.lang = selectedLang;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
     recognitionRef.current = recognition;
@@ -188,6 +238,7 @@ export default function VoiceTestModal({ onClose, prompt, modelProvider, voiceNa
     recognition.onstart = () => {
       setIsListening(true);
       setLiveTranscript('');
+      log('stt', 'Microphone listening', `lang=${selectedLang}`);
     };
 
     recognition.onresult = (event: ISpeechRecognitionEvent) => {
@@ -210,16 +261,24 @@ export default function VoiceTestModal({ onClose, prompt, modelProvider, voiceNa
       const spoken = finalTranscriptRef.current.trim();
       finalTranscriptRef.current = '';
       setLiveTranscript('');
+      if (spoken) {
+        log('stt', 'Speech recognized', spoken);
+      } else {
+        log('info', 'No speech detected');
+      }
       handleFinalSpeech(spoken);
     };
 
     recognition.onerror = (event: ISpeechRecognitionErrorEvent) => {
-      if (event.error !== 'no-speech') setError(`Mic error: ${event.error}`);
+      if (event.error !== 'no-speech') {
+        setError(`Mic error: ${event.error}`);
+        log('error', 'Microphone error', event.error);
+      }
       setIsListening(false);
     };
 
     recognition.start();
-  }, [handleFinalSpeech]);
+  }, [handleFinalSpeech, selectedLang, log]);
 
   const stopListening = useCallback(() => {
     recognitionRef.current?.stop();
@@ -228,6 +287,7 @@ export default function VoiceTestModal({ onClose, prompt, modelProvider, voiceNa
   const startCall = useCallback(async () => {
     setCallStarted(true);
     setError('');
+    log('info', 'Browser voice test started', `lang=${selectedLang}, voice=${voiceName || 'alloy'}`);
     try {
       const greeting = await sendToAI('__greeting__', []);
       setMessages([{ role: 'assistant', content: greeting }]);
@@ -235,9 +295,10 @@ export default function VoiceTestModal({ onClose, prompt, modelProvider, voiceNa
     } catch {
       const fallback = 'Hello! How can I help you today?';
       setMessages([{ role: 'assistant', content: fallback }]);
+      log('info', 'Using fallback greeting');
       await speak(fallback);
     }
-  }, [speak, sendToAI]);
+  }, [speak, sendToAI, selectedLang, voiceName, log]);
 
   const handleMicToggle = useCallback(() => {
     if (isListening) {
@@ -255,8 +316,9 @@ export default function VoiceTestModal({ onClose, prompt, modelProvider, voiceNa
       URL.revokeObjectURL(audioBlobUrlRef.current);
       audioBlobUrlRef.current = null;
     }
+    log('info', 'Browser voice test ended');
     onClose();
-  }, [onClose]);
+  }, [onClose, log]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
@@ -274,6 +336,31 @@ export default function VoiceTestModal({ onClose, prompt, modelProvider, voiceNa
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {!callStarted && (
+          <div className="px-6 pt-4">
+            <div className="flex items-center gap-3 p-3 bg-white/5 border border-white/10 rounded-xl">
+              <Globe className="w-4 h-4 text-gray-400 shrink-0" />
+              <div className="flex-1">
+                <label className="text-xs text-gray-400 block mb-1">Speech recognition language</label>
+                <select
+                  value={selectedLang}
+                  onChange={e => setSelectedLang(e.target.value)}
+                  className="w-full bg-transparent text-white text-sm outline-none cursor-pointer"
+                >
+                  {LANGUAGES.map(l => (
+                    <option key={l.code} value={l.code} className="bg-gray-900 text-white">
+                      {l.label} ({l.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <p className="text-xs text-gray-600 mt-2 px-1">
+              The AI responds in the language of your choice — set it in the system prompt.
+            </p>
+          </div>
+        )}
 
         {!supported && (
           <div className="flex items-center gap-3 m-4 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl text-yellow-300 text-sm">

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { LayoutDashboard, Settings } from 'lucide-react';
 import CallDispatcher from './components/CallDispatcher';
 import BulkDialer from './components/BulkDialer';
@@ -6,11 +6,22 @@ import CallLogs from './components/CallLogs';
 import AnalyticsBar from './components/AnalyticsBar';
 import AgentStatus from './components/AgentStatus';
 import SettingsPanel from './components/settings/SettingsPanel';
+import ActivityLog from './components/ActivityLog';
+import type { ActivityEntry } from './components/VoiceTestModal';
 
 type Tab = 'dashboard' | 'settings';
 
 function App() {
   const [tab, setTab] = useState<Tab>('dashboard');
+  const [activityLog, setActivityLog] = useState<ActivityEntry[]>([]);
+
+  const handleActivity = useCallback((entry: ActivityEntry) => {
+    setActivityLog(prev => [...prev.slice(-199), entry]);
+  }, []);
+
+  const clearActivity = useCallback(() => {
+    setActivityLog([]);
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
@@ -56,10 +67,11 @@ function App() {
           <>
             <AnalyticsBar />
             <div className="grid md:grid-cols-2 gap-8 max-w-6xl mx-auto mb-10">
-              <CallDispatcher />
+              <CallDispatcher onActivity={handleActivity} />
               <BulkDialer />
             </div>
-            <div className="max-w-6xl mx-auto">
+            <div className="max-w-6xl mx-auto space-y-8">
+              <ActivityLog entries={activityLog} onClear={clearActivity} />
               <CallLogs />
             </div>
           </>
