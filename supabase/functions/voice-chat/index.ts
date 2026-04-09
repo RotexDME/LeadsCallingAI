@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,6 +18,28 @@ interface VoiceChatRequest {
   modelProvider?: string;
 }
 
+async function getConfigKeys(): Promise<{ openaiKey: string | null; groqKey: string | null }> {
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+
+  const { data } = await supabase
+    .from("agent_config")
+    .select("key, value")
+    .in("key", ["OPENAI_API_KEY", "GROQ_API_KEY"]);
+
+  const map: Record<string, string> = {};
+  for (const row of data ?? []) {
+    map[row.key] = row.value;
+  }
+
+  return {
+    openaiKey: map["OPENAI_API_KEY"] || Deno.env.get("OPENAI_API_KEY") || null,
+    groqKey: map["GROQ_API_KEY"] || Deno.env.get("GROQ_API_KEY") || null,
+  };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -26,8 +49,7 @@ Deno.serve(async (req: Request) => {
     const body: VoiceChatRequest = await req.json();
     const { messages, systemPrompt, modelProvider } = body;
 
-    const openaiKey = Deno.env.get("OPENAI_API_KEY");
-    const groqKey = Deno.env.get("GROQ_API_KEY");
+    const { openaiKey, groqKey } = await getConfigKeys();
 
     const useGroq = modelProvider === "groq" && groqKey;
 
@@ -58,7 +80,7 @@ If they say "Bye", say "Namaste" or "Goodbye".`,
     } else {
       if (!openaiKey) {
         return new Response(
-          JSON.stringify({ error: "No AI API key configured. Set OPENAI_API_KEY or GROQ_API_KEY in edge function secrets." }),
+          JSON.stringify({ error: "No AI API key configured. Add OPENAI_API_KEY in Settings." }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
