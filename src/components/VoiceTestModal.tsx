@@ -190,12 +190,16 @@ export default function VoiceTestModal({ onClose, prompt, modelProvider }: Voice
   const startCall = useCallback(async () => {
     setCallStarted(true);
     setError('');
-    const greeting = prompt
-      ? 'Hello! I am your AI assistant. How can I help you today?'
-      : 'Namaste! Thank you for calling Rapid X High School. How may I assist you today?';
-    setMessages([{ role: 'assistant', content: greeting }]);
-    await speak(greeting);
-  }, [speak, prompt]);
+    try {
+      const greeting = await sendToAI('__greeting__', []);
+      setMessages([{ role: 'assistant', content: greeting }]);
+      await speak(greeting);
+    } catch {
+      const fallback = 'Hello! How can I help you today?';
+      setMessages([{ role: 'assistant', content: fallback }]);
+      await speak(fallback);
+    }
+  }, [speak, sendToAI]);
 
   const handleMicToggle = useCallback(() => {
     if (isListening) {

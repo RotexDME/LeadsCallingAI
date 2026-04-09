@@ -85,7 +85,10 @@ Deno.serve(async (req: Request) => {
       content: systemContent,
     };
 
-    const allMessages = [systemMessage, ...messages];
+    const isGreeting = messages.length === 1 && messages[0].role === "user" && messages[0].content === "__greeting__";
+    const allMessages = isGreeting
+      ? [systemMessage, { role: "user" as const, content: "Begin the call with a natural opening greeting." }]
+      : [systemMessage, ...messages];
 
     let apiUrl: string;
     let apiKey: string;
